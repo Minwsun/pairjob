@@ -1,0 +1,3 @@
+export default function Loading() {
+  return <main className="route-loading" aria-busy="true"><div className="skeleton skeleton-title"/><div className="grid grid-3"><div className="skeleton skeleton-card"/><div className="skeleton skeleton-card"/><div className="skeleton skeleton-card"/></div><div className="skeleton skeleton-block"/></main>;
+}

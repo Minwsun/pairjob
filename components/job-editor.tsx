@@ -1,0 +1,12 @@
+"use client";
+import { useState } from "react";
+import { AsyncButton } from "@/components/async-button";
+import { StatusToast } from "@/components/progress-panel";
+
+type EditableJob = { id: string; displayTitle: string | null; rawDescription: string; company: string | null; contractType: string | null; workMode: string | null; budgetMin: number; budgetMax: number; compensationPeriod: string; weeklyHoursMin: number | null; weeklyHoursMax: number | null; deadlineText: string | null };
+export function JobEditor({ initial }: { initial: EditableJob }) {
+  const [job, setJob] = useState(initial); const [pending, setPending] = useState(false); const [message, setMessage] = useState(""); const [error, setError] = useState("");
+  const field = (key: keyof EditableJob, label: string, type = "text") => <label className="profile-field"><span>{label}</span><input className="input" type={type} value={String(job[key] ?? "")} onChange={(event) => setJob((current) => ({ ...current, [key]: type === "number" ? Number(event.target.value) : event.target.value }))}/></label>;
+  async function save() { setPending(true); setMessage(""); setError(""); try { const response = await fetch(`/api/jobs/${job.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(job) }); const body = await response.json(); if (!response.ok) throw new Error(body.errors?.[0]?.message ?? "Không thể lưu job"); setJob(body.data); setMessage("Đã lưu thay đổi. Matching được đánh dấu cần cập nhật."); } catch (caught) { setError(caught instanceof Error ? caught.message : String(caught)); } finally { setPending(false); } }
+  return <div className="card"><div className="profile-grid">{field("displayTitle", "Tiêu đề")}{field("company", "Công ty")}<label className="profile-field profile-wide"><span>Mô tả</span><textarea className="input" rows={8} value={job.rawDescription} onChange={(event) => setJob((current) => ({ ...current, rawDescription: event.target.value }))}/></label>{field("contractType", "Loại hợp đồng")}{field("workMode", "Hình thức làm việc")}{field("budgetMin", "Lương tối thiểu", "number")}{field("budgetMax", "Lương tối đa", "number")}{field("weeklyHoursMin", "Giờ tối thiểu/tuần", "number")}{field("weeklyHoursMax", "Giờ tối đa/tuần", "number")}{field("deadlineText", "Deadline")}</div><AsyncButton style={{ marginTop: 18 }} pending={pending} pendingLabel="Đang lưu..." onClick={save}>Lưu thay đổi</AsyncButton><StatusToast message={error || message} tone={error ? "error" : "success"}/></div>;
+}

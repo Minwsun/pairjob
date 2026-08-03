@@ -1,0 +1,15 @@
+node_modules/
+.next/
+.vercel/
+.venv-ocr/
+.venv-embedding/
+.env*
+!.env.example
+storage/uploads/
+reports/
+output/
+tmp/
+*.tsbuildinfo
+*.log
+.dev-*
+.test-*

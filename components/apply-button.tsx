@@ -1,0 +1,4 @@
+"use client";
+import { useState } from "react";
+import { AsyncButton } from "@/components/async-button";
+export function ApplyButton({jobId,applied=false}:{jobId:string;applied?:boolean}){const[pending,setPending]=useState(false);const[done,setDone]=useState(applied);const[error,setError]=useState("");async function apply(){setPending(true);setError("");try{const response=await fetch("/api/applications",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({jobId})});const body=await response.json();if(!response.ok)throw new Error(body.errors?.[0]?.message??"Không thể ứng tuyển");setDone(true);}catch(caught){setError(caught instanceof Error?caught.message:String(caught));}finally{setPending(false)}}return <div><AsyncButton pending={pending} pendingLabel="Đang gửi ứng tuyển..." disabled={done} onClick={apply}>{done?"Đã ứng tuyển":"Ứng tuyển ngay"}</AsyncButton>{error&&<small className="form-error">{error}</small>}</div>}

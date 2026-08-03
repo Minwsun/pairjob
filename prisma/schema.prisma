@@ -1,0 +1,679 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  EMPLOYER
+  CANDIDATE
+}
+
+enum DocumentStatus {
+  UPLOADED
+  PARSED
+  OCR_REQUIRED
+  FAILED
+}
+
+enum TaxonomyStatus {
+  ACTIVE
+  PENDING
+  INACTIVE
+}
+
+enum JobStatus {
+  DRAFT
+  CLARIFYING
+  READY_FOR_REVIEW
+  CONFIRMED
+  PUBLISHED
+}
+
+enum ClarificationStatus {
+  PENDING
+  ANSWERED
+  SKIPPED
+  INVALIDATED
+}
+
+model User {
+  id                       String                    @id @default(cuid())
+  email                    String                    @unique
+  displayName              String
+  role                     Role
+  candidateProfile         CandidateProfile?
+  jobs                     Job[]
+  documents                Document[]
+  recommendationSessions   RecommendationSession[]
+  recommendationEvents     RecommendationEvent[]
+  recommendationPreference RecommendationPreference?
+  pipelineRuns             PipelineRun[]
+  createdAt                DateTime                  @default(now())
+  updatedAt                DateTime                  @updatedAt
+}
+
+model TaxonomyLabel {
+  id                  String               @id
+  type                String
+  preferredName       String
+  description         String?
+  definition          String?
+  semanticFingerprint String?              @unique
+  externalSource      String?
+  externalId          String?
+  sourceVersion       String?
+  locale              String               @default("en")
+  metadata            Json?
+  activationReason    String?
+  createdBy           String               @default("seed")
+  model               String?
+  confidence          Float                @default(1)
+  reviewStatus        String               @default("VERIFIED")
+  parentId            String?
+  parent              TaxonomyLabel?       @relation("TaxonomyParent", fields: [parentId], references: [id])
+  children            TaxonomyLabel[]      @relation("TaxonomyParent")
+  status              TaxonomyStatus       @default(ACTIVE)
+  aliases             TaxonomyAlias[]
+  mappings            JobLabelMapping[]
+  outgoingEdges       TaxonomyEdge[]       @relation("TaxonomyEdgeFrom")
+  incomingEdges       TaxonomyEdge[]       @relation("TaxonomyEdgeTo")
+  resolutions         TaxonomyResolution[]
+  candidateAssertions CandidateConceptAssertion[]
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+
+  @@unique([externalSource, externalId])
+  @@index([type, status])
+}
+
+model TaxonomyEdge {
+  id         String        @id @default(cuid())
+  fromId     String
+  from       TaxonomyLabel @relation("TaxonomyEdgeFrom", fields: [fromId], references: [id], onDelete: Cascade)
+  toId       String
+  to         TaxonomyLabel @relation("TaxonomyEdgeTo", fields: [toId], references: [id], onDelete: Cascade)
+  relation   String
+  confidence Float         @default(1)
+  createdBy  String        @default("seed")
+  evidence   String?
+  source     String?
+  sourceVersion String?
+  inferencePolicy String @default("EXPLICIT")
+  maxHops    Int           @default(1)
+  scoreCap   Float         @default(1)
+  status     String        @default("ACTIVE")
+  metadata   Json?
+  createdAt  DateTime      @default(now())
+
+  @@unique([fromId, toId, relation])
+  @@index([fromId, relation])
+  @@index([toId, relation])
+}
+
+model TaxonomyResolution {
+  id              String         @id @default(cuid())
+  taxonomyLabelId String?
+  taxonomyLabel   TaxonomyLabel? @relation(fields: [taxonomyLabelId], references: [id], onDelete: SetNull)
+  rawText         String
+  interpretedText String
+  entityType      String
+  action          String
+  confidence      Float
+  evidence        String?
+  model           String?
+  metadata        Json?
+  createdAt       DateTime       @default(now())
+
+  @@index([entityType, rawText])
+}
+
+model TaxonomyAlias {
+  id         String        @id @default(cuid())
+  labelId    String
+  label      TaxonomyLabel @relation(fields: [labelId], references: [id], onDelete: Cascade)
+  alias      String
+  normalized String
+  language   String        @default("vi")
+  kind       String        @default("alias")
+
+  @@unique([normalized, labelId])
+  @@index([normalized])
+}
+
+model CandidateProfile {
+  id                         String                      @id @default(cuid())
+  userId                     String                      @unique
+  user                       User                        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  displayTitle               String?
+  occupation                 String?
+  skills                     Json                        @default("[]")
+  domains                    Json                        @default("[]")
+  experiences                Json                        @default("[]")
+  projects                   Json                        @default("[]")
+  education                  Json                        @default("[]")
+  experienceYears            Float                       @default(0)
+  workModes                  Json                        @default("[]")
+  availabilityHours          Int?
+  hourlyRate                 Float?
+  expectedCompensationMin    Float?
+  expectedCompensationMax    Float?
+  compensationCurrency       String                      @default("VND")
+  compensationPeriod         String                      @default("HOUR")
+  originalCompensation       Float?
+  originalCurrency           String?
+  compensationExchangeRate   Float?
+  searchDocument             String                      @default("")
+  embeddingModel             String?
+  embeddingUpdatedAt         DateTime?
+  embedding                  Unsupported("vector(384)")?
+  queryEmbedding             Unsupported("vector(384)")?
+  evidenceQuality            Float                       @default(0)
+  completeness               Float                       @default(0)
+  verified                   Boolean                     @default(false)
+  profileVersion             Int                         @default(1)
+  lastRecomputedVersion      Int                         @default(0)
+  selectedTargetOccupationId String?
+  matches                    MatchResult[]
+  recommendationItems        RecommendationItem[]
+  revisions                  ProfileRevision[]
+  recomputeTasks             RecomputeTask[]
+  roadmapVersions            RoadmapVersion[]
+  applications               Application[]
+  conceptAssertions          CandidateConceptAssertion[]
+  clarificationQuestions     CandidateClarificationQuestion[]
+  createdAt                  DateTime                    @default(now())
+  updatedAt                  DateTime                    @updatedAt
+}
+
+model CandidateConceptAssertion {
+  id                 String           @id @default(cuid())
+  candidateProfileId String
+  candidateProfile   CandidateProfile @relation(fields: [candidateProfileId], references: [id], onDelete: Cascade)
+  taxonomyLabelId    String
+  taxonomyLabel      TaxonomyLabel    @relation(fields: [taxonomyLabelId], references: [id], onDelete: Cascade)
+  assertionType      String
+  proficiency        Float?
+  confidence         Float            @default(0.5)
+  evidence           Json             @default("[]")
+  sourceVersion      Int
+  active             Boolean          @default(true)
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+
+  @@unique([candidateProfileId, taxonomyLabelId, assertionType, sourceVersion])
+  @@index([candidateProfileId, active])
+  @@index([taxonomyLabelId, assertionType])
+}
+
+model CandidateClarificationQuestion {
+  id                 String                  @id @default(cuid())
+  candidateProfileId String
+  candidateProfile   CandidateProfile        @relation(fields: [candidateProfileId], references: [id], onDelete: Cascade)
+  profileVersion     Int
+  field              String
+  conceptId          String?
+  question           String
+  reason             String
+  impact             Int
+  informationGain    Float                   @default(0.5)
+  required           Boolean                 @default(false)
+  inputType          String
+  options            Json                    @default("[]")
+  affectedConcepts   Json                    @default("[]")
+  status             ClarificationStatus     @default(PENDING)
+  position           Int
+  answer             CandidateClarificationAnswer?
+  createdAt          DateTime                @default(now())
+  updatedAt          DateTime                @updatedAt
+
+  @@index([candidateProfileId, profileVersion, status, position])
+}
+
+model CandidateClarificationAnswer {
+  id             String                         @id @default(cuid())
+  questionId     String                         @unique
+  question       CandidateClarificationQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  value          Json
+  skipped        Boolean                        @default(false)
+  profileChanges Json?
+  createdAt      DateTime                       @default(now())
+  updatedAt      DateTime                       @updatedAt
+}
+
+model Job {
+  id                        String                      @id @default(cuid())
+  ownerId                   String
+  owner                     User                        @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  rawTitle                  String
+  rawDescription            String
+  displayTitle              String?
+  company                   String?
+  occupation                String?
+  requiredSkills            Json                        @default("[]")
+  preferredSkills           Json                        @default("[]")
+  domains                   Json                        @default("[]")
+  experienceMin             Float                       @default(0)
+  workMode                  String?
+  availabilityMin           Int                         @default(0)
+  weeklyHoursMin           Int?
+  weeklyHoursMax           Int?
+  budgetMin                 Float                       @default(0)
+  budgetMax                 Float                       @default(0)
+  currency                  String                      @default("VND")
+  compensationPeriod       String                      @default("HOUR")
+  originalBudgetMin        Float?
+  originalBudgetMax        Float?
+  originalCurrency         String?
+  compensationExchangeRate Float?
+  deadlineText              String?
+  deadlineAt                DateTime?
+  projectDurationText       String?
+  responsibilities          Json                        @default("[]")
+  deliverables              Json                        @default("[]")
+  benefits                  Json                        @default("[]")
+  contractType              String?
+  locationText              String?
+  languageRequirements      Json                        @default("[]")
+  certificationRequirements Json                        @default("[]")
+  educationRequirements     Json                        @default("[]")
+  extraction                Json?
+  canonicalSummary          String?
+  canonicalRequirements     Json                        @default("[]")
+  missingFields             Json                        @default("[]")
+  completeness              Float                       @default(0)
+  confirmed                 Boolean                     @default(false)
+  published                 Boolean                     @default(false)
+  publishedAt               DateTime?
+  status                    JobStatus                   @default(DRAFT)
+  experiencePolicy          String?
+  clarificationDone         Boolean                     @default(false)
+  skillRequirementPolicy    String                      @default("NEEDS_CLARIFICATION")
+  needsReview               Boolean                     @default(false)
+  searchDocument            String                      @default("")
+  embeddingModel            String?
+  embeddingUpdatedAt        DateTime?
+  embedding                 Unsupported("vector(384)")?
+  queryEmbedding            Unsupported("vector(384)")?
+  labelMappings             JobLabelMapping[]
+  clarifications            ClarificationQuestion[]
+  matches                   MatchResult[]
+  recommendationItems       RecommendationItem[]
+  applications              Application[]
+  createdAt                 DateTime                    @default(now())
+  updatedAt                 DateTime                    @updatedAt
+}
+
+model ProfileRevision {
+  id                 String           @id @default(cuid())
+  candidateProfileId String
+  candidateProfile   CandidateProfile @relation(fields: [candidateProfileId], references: [id], onDelete: Cascade)
+  version            Int
+  source             String
+  snapshot           Json
+  createdAt          DateTime         @default(now())
+
+  @@unique([candidateProfileId, version])
+  @@index([candidateProfileId, createdAt])
+}
+
+model RecomputeTask {
+  id                 String           @id @default(cuid())
+  candidateProfileId String
+  candidateProfile   CandidateProfile @relation(fields: [candidateProfileId], references: [id], onDelete: Cascade)
+  profileVersion     Int
+  status             String           @default("PENDING")
+  attempts           Int              @default(0)
+  error              String?
+  startedAt          DateTime?
+  completedAt        DateTime?
+  lockedAt           DateTime?
+  leaseUntil         DateTime?
+  nextAttemptAt      DateTime?
+  progress           Int              @default(0)
+  processedItems     Int              @default(0)
+  totalItems         Int              @default(0)
+  createdAt          DateTime         @default(now())
+
+  @@unique([candidateProfileId, profileVersion])
+  @@index([status, createdAt])
+}
+
+model RoadmapVersion {
+  id                   String           @id @default(cuid())
+  candidateProfileId   String
+  candidateProfile     CandidateProfile @relation(fields: [candidateProfileId], references: [id], onDelete: Cascade)
+  profileVersion       Int
+  targetOccupationId   String
+  taxonomyVersion      String
+  rankingPolicyVersion String
+  roadmap              Json
+  createdAt            DateTime         @default(now())
+
+  @@index([candidateProfileId, profileVersion, targetOccupationId])
+}
+
+model Application {
+  id                 String             @id @default(cuid())
+  jobId              String
+  job                Job                @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  candidateProfileId String
+  candidateProfile   CandidateProfile   @relation(fields: [candidateProfileId], references: [id], onDelete: Cascade)
+  status             String             @default("APPLIED")
+  coverNote          String?
+  events             ApplicationEvent[]
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+
+  @@unique([jobId, candidateProfileId])
+  @@index([candidateProfileId, status, createdAt])
+  @@index([jobId, status, createdAt])
+}
+
+model ApplicationEvent {
+  id            String      @id @default(cuid())
+  applicationId String
+  application   Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  fromStatus    String?
+  toStatus      String
+  actorRole     String
+  note          String?
+  createdAt     DateTime    @default(now())
+
+  @@index([applicationId, createdAt])
+}
+
+model RecommendationSession {
+  id               String                @id @default(cuid())
+  actorId          String
+  actor            User                  @relation(fields: [actorId], references: [id], onDelete: Cascade)
+  kind             String
+  queryEntityId    String
+  status           String                @default("SUCCEEDED")
+  retrievalVersion String                @default("hybrid-v1")
+  rankingVersion   String                @default("llm-semantic-v1")
+  rerankerVersion  String                @default("multi-objective-v1")
+  taxonomyVersion  String
+  promptVersion    String                @default("2026-07-29")
+  queryVersion     String                @default("1")
+  cacheKey         String?               @unique
+  resultPayload    Json?
+  staleAt          DateTime?
+  expiresAt        DateTime?
+  items            RecommendationItem[]
+  events           RecommendationEvent[]
+  createdAt        DateTime              @default(now())
+
+  @@index([actorId, kind, createdAt])
+  @@index([kind, queryEntityId, queryVersion, createdAt])
+}
+
+model RecommendationItem {
+  id                    String                @id @default(cuid())
+  sessionId             String
+  session               RecommendationSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  jobId                 String?
+  job                   Job?                  @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  candidateProfileId    String?
+  candidateProfile      CandidateProfile?     @relation(fields: [candidateProfileId], references: [id], onDelete: Cascade)
+  retrievalScore        Float
+  matchScore            Float
+  recommendationScore   Float
+  confidence            Float
+  eligible              Boolean
+  rankBefore            Int
+  rankAfter             Int
+  diversityContribution Float                 @default(0)
+  reasons               Json                  @default("[]")
+  matchedSignals        Json                  @default("[]")
+  taxonomyPaths         Json                  @default("[]")
+  createdAt             DateTime              @default(now())
+
+  @@index([sessionId, rankAfter])
+  @@index([jobId])
+  @@index([candidateProfileId])
+}
+
+model RecommendationEvent {
+  id                String                 @id @default(cuid())
+  actorId           String
+  actor             User                   @relation(fields: [actorId], references: [id], onDelete: Cascade)
+  sessionId         String?
+  session           RecommendationSession? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+  eventType         String
+  targetJobId       String?
+  targetCandidateId String?
+  position          Int?
+  strength          Float
+  metadata          Json?
+  createdAt         DateTime               @default(now())
+
+  @@index([actorId, eventType, createdAt])
+  @@index([sessionId])
+}
+
+model RecommendationPreference {
+  id         String   @id @default(cuid())
+  userId     String   @unique
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  explicit   Json     @default("{}")
+  inferred   Json     @default("{}")
+  confidence Float    @default(0)
+  updatedAt  DateTime @updatedAt
+  createdAt  DateTime @default(now())
+}
+
+model RankingPolicy {
+  id        String   @id @default(cuid())
+  kind      String
+  version   String   @unique
+  weights   Json
+  active    Boolean  @default(false)
+  metrics   Json?
+  createdAt DateTime @default(now())
+
+  @@index([kind, active])
+}
+
+model JobLabelMapping {
+  id                    String         @id @default(cuid())
+  jobId                 String
+  job                   Job            @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  taxonomyLabelId       String?
+  taxonomyLabel         TaxonomyLabel? @relation(fields: [taxonomyLabelId], references: [id])
+  rawText               String
+  interpretedText       String?
+  labelType             String
+  requirementType       String?
+  requirementConfidence Float?
+  requirementReason     String?
+  importance            Int?
+  confidence            Float
+  method                String
+  evidence              String?
+  mappingRole           String         @default("primary")
+  derivedFrom           Json?
+  confirmed             Boolean        @default(false)
+  createdAt             DateTime       @default(now())
+  updatedAt             DateTime       @updatedAt
+
+  @@index([jobId, labelType])
+}
+
+model ClarificationQuestion {
+  id        String               @id @default(cuid())
+  jobId     String
+  job       Job                  @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  field     String
+  question  String
+  reason    String
+  impact    Int
+  required  Boolean              @default(false)
+  inputType String
+  options   Json                 @default("[]")
+  dependsOn Json?
+  status    ClarificationStatus  @default(PENDING)
+  answer    ClarificationAnswer?
+  position  Int
+  createdAt DateTime             @default(now())
+  updatedAt DateTime             @updatedAt
+
+  @@index([jobId, status, position])
+}
+
+model ClarificationAnswer {
+  id         String                @id @default(cuid())
+  questionId String                @unique
+  question   ClarificationQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  value      Json
+  skipped    Boolean               @default(false)
+  createdAt  DateTime              @default(now())
+  updatedAt  DateTime              @updatedAt
+}
+
+model Document {
+  id             String         @id @default(cuid())
+  ownerId        String
+  owner          User           @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  filename       String?
+  mimeType       String?
+  storagePath    String?
+  sourceUrl      String?
+  rawText        String?
+  sections       Json?
+  parserMetadata Json?
+  status         DocumentStatus @default(UPLOADED)
+  error          String?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  pipelineRuns   PipelineRun[]
+}
+
+model PipelineRun {
+  id           String          @id @default(cuid())
+  operationId  String          @unique
+  actorId      String
+  actor        User            @relation(fields: [actorId], references: [id], onDelete: Cascade)
+  documentId   String?
+  document     Document?       @relation(fields: [documentId], references: [id], onDelete: SetNull)
+  flow         String
+  status       String          @default("RUNNING")
+  currentStage String?
+  errorCode    String?
+  error        String?
+  retryable    Boolean         @default(false)
+  metadata     Json?
+  startedAt    DateTime        @default(now())
+  completedAt  DateTime?
+  stages       PipelineStage[]
+
+  @@index([actorId, flow, startedAt])
+  @@index([status, startedAt])
+}
+
+model PipelineStage {
+  id          String      @id @default(cuid())
+  runId       String
+  run         PipelineRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+  stage       String
+  label       String
+  status      String      @default("RUNNING")
+  progress    Int
+  message     String?
+  error       String?
+  startedAt   DateTime    @default(now())
+  completedAt DateTime?
+
+  @@index([runId, startedAt])
+}
+
+model Evidence {
+  id         String   @id @default(cuid())
+  entityType String
+  entityId   String
+  field      String
+  sourceType String
+  sourceText String
+  confidence Float
+  createdAt  DateTime @default(now())
+
+  @@index([entityType, entityId])
+}
+
+model MatchResult {
+  id                 String           @id @default(cuid())
+  jobId              String
+  job                Job              @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  candidateProfileId String
+  candidateProfile   CandidateProfile @relation(fields: [candidateProfileId], references: [id], onDelete: Cascade)
+  score              Int
+  confidence         Int
+  eligible           Boolean
+  breakdown          Json
+  reasons            Json
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+
+  @@unique([jobId, candidateProfileId])
+}
+
+model AgentRun {
+  id              String      @id @default(cuid())
+  actorId         String?
+  skill           String
+  skillVersion    String
+  modelRoute      String
+  status          String      @default("RUNNING")
+  budgetClass     String
+  maxSteps        Int
+  input           Json
+  output          Json?
+  unresolvedRisks Json        @default("[]")
+  error           String?
+  startedAt       DateTime    @default(now())
+  completedAt     DateTime?
+  steps           AgentStep[]
+
+  @@index([actorId, skill, startedAt])
+  @@index([status, startedAt])
+}
+
+model AgentStep {
+  id        String   @id @default(cuid())
+  runId     String
+  run       AgentRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+  position  Int
+  action    String
+  toolName  String?
+  arguments Json?
+  result    Json?
+  reasoning String?
+  error     String?
+  latencyMs Int
+  model     String
+  createdAt DateTime @default(now())
+
+  @@unique([runId, position])
+}
+
+model AgentMemory {
+  id           String    @id @default(cuid())
+  scope        String
+  scopeId      String
+  kind         String
+  fingerprint  String
+  content      Json
+  confidence   Float     @default(0.5)
+  provenance   Json?
+  usageCount   Int       @default(0)
+  expiresAt    DateTime?
+  supersededBy String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@unique([scope, scopeId, kind, fingerprint])
+  @@index([scope, scopeId, kind, expiresAt])
+}

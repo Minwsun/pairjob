@@ -1,0 +1,10 @@
+import { NextRequest, NextResponse } from "next/server";
+import { z } from "zod";
+import { db } from "@/lib/db";
+import { getDemoEmployer } from "@/lib/demo-user";
+import { compensationPeriod } from "@/lib/compensation";
+import { after } from "next/server";
+import { recommendCandidates } from "@/lib/recommendation-engine";
+
+const schema = z.object({ displayTitle: z.string().min(5).max(160), rawDescription: z.string().min(20).max(20_000), company: z.string().min(2).max(160), contractType: z.string().min(2), workMode: z.string().min(2), budgetMin: z.number().min(0), budgetMax: z.number().min(0), weeklyHoursMin: z.number().min(0).max(48).nullable(), weeklyHoursMax: z.number().min(0).max(48).nullable(), deadlineText: z.string().max(300).nullable() }).refine((value) => value.budgetMax >= value.budgetMin, { message: "Lương tối đa phải lớn hơn hoặc bằng lương tối thiểu" }).refine((value) => !value.weeklyHoursMin || !value.weeklyHoursMax || value.weeklyHoursMax >= value.weeklyHoursMin, { message: "Giờ tối đa phải lớn hơn hoặc bằng giờ tối thiểu" });
+export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) { try { const { id } = await params; const employer = await getDemoEmployer(); const input = schema.parse(await request.json()); const existing = await db.job.findFirstOrThrow({ where: { id, ownerId: employer.id } }); const job = await db.job.update({ where: { id: existing.id }, data: { ...input, compensationPeriod: compensationPeriod(input.contractType), canonicalSummary: input.rawDescription, completeness: Math.min(existing.completeness, .9), embeddingModel: null, embeddingUpdatedAt: null } }); after(() => recommendCandidates(job.id).catch(() => undefined)); return NextResponse.json({ data: job, errors: [], requestId: crypto.randomUUID() }); } catch (error) { return NextResponse.json({ data: null, errors: [{ code: "JOB_UPDATE_FAILED", message: error instanceof Error ? error.message : String(error) }], requestId: crypto.randomUUID() }, { status: 400 }); } }

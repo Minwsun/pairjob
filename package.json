@@ -1,0 +1,55 @@
+{
+  "name": "pairjob",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "postinstall": "prisma generate",
+    "dev": "next dev",
+    "build": "next build",
+    "vercel-build": "next build",
+    "start": "next start",
+    "db:up": "docker compose up -d postgres",
+    "db:migrate": "prisma migrate dev",
+    "db:deploy": "prisma migrate deploy",
+    "db:seed-taxonomy": "tsx scripts/seed-taxonomy.ts",
+    "db:seed-education": "tsx scripts/seed-education-taxonomy.ts",
+    "db:backfill-occupations": "tsx scripts/backfill-compound-occupations.ts",
+    "db:backfill-required-skills": "tsx scripts/backfill-required-skills.ts",
+    "embedding:backfill": "tsx scripts/backfill-embeddings.ts",
+    "db:studio": "prisma studio"
+  },
+  "dependencies": {
+    "@napi-rs/canvas": "0.1.80",
+    "@prisma/client": "^6.19.0",
+    "@vercel/blob": "^2.6.1",
+    "cheerio": "^1.2.0",
+    "mammoth": "^1.12.0",
+    "next": "16.2.12",
+    "pdf-parse": "^2.4.5",
+    "prisma": "^6.19.0",
+    "react": "19.2.0",
+    "react-dom": "19.2.0",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "^20.17.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "docx": "^9.7.1",
+    "pdf-lib": "^1.17.1",
+    "tsx": "^4.20.0",
+    "typescript": "^5.7.0"
+  },
+  "overrides": {
+    "postcss": "8.5.24",
+    "sharp": "0.35.3"
+  },
+  "description": "PairJob - nền tảng kết nối việc làm thông minh với AI matching và lộ trình phát triển.",
+  "main": "index.js",
+  "directories": {
+    "lib": "lib"
+  },
+  "keywords": [],
+  "author": "Nguyễn Nhật Minh",
+  "license": "ISC"
+}

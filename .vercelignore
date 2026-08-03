@@ -1,0 +1,16 @@
+.next/
+.venv-ocr/
+.venv-embedding/
+node_modules/
+storage/
+output/
+reports/
+tmp/
+.vercel/
+.env*
+!.env.example
+*.log
+tsconfig.tsbuildinfo
+requirements-ocr.txt
+requirements-embedding.txt
+docker-compose.yml

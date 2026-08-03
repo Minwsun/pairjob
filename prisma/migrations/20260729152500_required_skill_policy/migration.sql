@@ -1,0 +1,7 @@
+ALTER TABLE "Job"
+ADD COLUMN "skillRequirementPolicy" TEXT NOT NULL DEFAULT 'NEEDS_CLARIFICATION',
+ADD COLUMN "needsReview" BOOLEAN NOT NULL DEFAULT false;
+
+ALTER TABLE "JobLabelMapping"
+ADD COLUMN "requirementConfidence" DOUBLE PRECISION,
+ADD COLUMN "requirementReason" TEXT;

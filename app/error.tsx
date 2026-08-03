@@ -1,0 +1,2 @@
+"use client";
+export default function GlobalError({ error, reset }: { error: Error & { digest?: string }; reset: () => void }) { return <main className="route-loading"><div className="card"><span className="badge red">Có lỗi</span><h1>Không thể tải trang</h1><p>{error.message || "Hệ thống gặp lỗi không xác định."}</p><button className="btn btn-primary" onClick={reset}>Thử lại</button></div></main>; }
